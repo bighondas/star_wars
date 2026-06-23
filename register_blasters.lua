@@ -147,115 +147,114 @@ minetest.register_entity("star_wars:laser", {
         })
     end,
 
-    on_step = function(self, dtime, moveresult)
-        self.timer = self.timer + dtime
-        if self.timer > 3 then
-            self.object:remove()
-            return
+   on_step = function(self, dtime, moveresult)
+    self.timer = self.timer + dtime
+    if self.timer > 3 then
+        self.object:remove()
+        return
+    end
+
+    local pos = self.object:get_pos()
+    if not pos then return end
+
+    local vel = self.object:get_velocity()
+    if not vel then return end
+
+    if vector.length(vel) > 0.001 then
+        local dir = vector.normalize(vel)
+        self.object:set_velocity(vector.multiply(dir, self.speed))
+        laser_set_rotation_from_velocity(self.object, dir)
+    end
+
+    local function damage_vehicle_from_hit(obj, hit_pos)
+        if not obj then return false end
+        local ent = obj:get_luaentity()
+        if not ent or not ent._vehicle_hp then return false end
+        if star_wars and star_wars.apply_vehicle_hit then
+            return star_wars.apply_vehicle_hit(ent, hit_pos, self.vehicle_damage or self.damage or 2)
         end
+        return false
+    end
 
-        local pos = self.object:get_pos()
-        if not pos then return end
+    local function is_excluded(obj)
+        return obj == self.object
+            or obj == self.shooter
+            or obj == self.shooter_vehicle
+    end
 
-        local vel = self.object:get_velocity()
-        if not vel then return end
+    if self.last_pos then
+        local ray = minetest.raycast(self.last_pos, pos, true, false)
 
-        if vector.length(vel) > 0.001 then
-            local dir = vector.normalize(vel)
-            self.object:set_velocity(vector.multiply(dir, self.speed))
-            laser_set_rotation_from_velocity(self.object, dir)
-        end
+        for pointed in ray do
+            if pointed.type == "object" then
+                local obj = pointed.ref
+                if obj and not is_excluded(obj) then
+                    local ent = obj:get_luaentity()
+                    local hit_pos = pointed.intersection_point or pos
 
-        local function damage_vehicle_from_hit(obj, hit_pos)
-            if not obj then
-                return false
-            end
-
-            local ent = obj:get_luaentity()
-            if not ent or not ent._vehicle_hp then
-                return false
-            end
-
-            if star_wars and star_wars.apply_vehicle_hit then
-                return star_wars.apply_vehicle_hit(ent, hit_pos, self.vehicle_damage or self.damage or 2)
-            end
-
-            return false
-        end
-
-        if self.last_pos then
-            local ray = minetest.raycast(self.last_pos, pos, true, false)
-
-            for pointed in ray do
-                if pointed.type == "object" then
-                    local obj = pointed.ref
-                    if obj and obj ~= self.object and obj ~= self.shooter then
-                        local ent = obj:get_luaentity()
-                        local hit_pos = pointed.intersection_point or pos
-
-                        if ent and ent._vehicle_hp then
-                            if damage_vehicle_from_hit(obj, hit_pos) then
-                                self.object:remove()
-                                return
-                            end
-                        end
-
-                        if try_deflect(self, obj, pos) then
+                    if ent and ent._vehicle_hp then
+                        if damage_vehicle_from_hit(obj, hit_pos) then
+                            self.object:remove()
                             return
                         end
+                    end
 
-                        obj:punch(self.object, 1.0, {
-                            full_punch_interval = 0.1,
-                            damage_groups = {fleshy = self.damage},
-                        }, vector.normalize(vel))
-
-                        self.object:remove()
+                    if try_deflect(self, obj, pos) then
                         return
                     end
 
-                elseif pointed.type == "node" then
+                    obj:punch(self.object, 1.0, {
+                        full_punch_interval = 0.1,
+                        damage_groups = {fleshy = self.damage},
+                    }, vector.normalize(vel))
+
                     self.object:remove()
                     return
                 end
+
+            elseif pointed.type == "node" then
+                self.object:remove()
+                return
             end
         end
+    end
 
-        self.last_pos = vector.copy(pos)
+    self.last_pos = vector.copy(pos)
 
-        if moveresult and moveresult.collisions then
-            for _, c in ipairs(moveresult.collisions) do
-                if c.type == "object" and c.object then
-                    local obj = c.object
-                    if obj ~= self.object and obj ~= self.shooter then
-                        local ent = obj:get_luaentity()
+    if moveresult and moveresult.collisions then
+        for _, c in ipairs(moveresult.collisions) do
+            if c.type == "object" and c.object then
+                local obj = c.object
+                if not is_excluded(obj) then
+                    local ent = obj:get_luaentity()
 
-                        if ent and ent._vehicle_hp then
-                            local hit_pos = obj:get_pos() or pos
-                            if damage_vehicle_from_hit(obj, hit_pos) then
-                                self.object:remove()
-                                return
-                            end
-                        end
-
-                        if try_deflect(self, obj, pos) then
+                    if ent and ent._vehicle_hp then
+                        local hit_pos = obj:get_pos() or pos
+                        if damage_vehicle_from_hit(obj, hit_pos) then
+                            self.object:remove()
                             return
                         end
+                    end
 
-                        obj:punch(self.object, 1.0, {
-                            full_punch_interval = 0.1,
-                            damage_groups = {fleshy = self.damage},
-                        }, vector.normalize(vel))
-
-                        self.object:remove()
+                    if try_deflect(self, obj, pos) then
                         return
                     end
-                elseif c.type == "node" then
+
+                    obj:punch(self.object, 1.0, {
+                        full_punch_interval = 0.1,
+                        damage_groups = {fleshy = self.damage},
+                    }, vector.normalize(vel))
+
                     self.object:remove()
                     return
                 end
+            elseif c.type == "node" then
+                self.object:remove()
+                return
             end
         end
-    end,
+    end
+end,
 })
 
 --==========================
