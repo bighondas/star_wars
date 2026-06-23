@@ -699,8 +699,8 @@ minetest.register_globalstep(function(dtime)
         local jump_pressed  = ctrl.jump and not prev.jump
         local rmb_pressed   = ctrl.RMB  and not prev.RMB
         local up_pressed    = ctrl.up   and not prev.up
-
-        if cycle_pressed then
+            
+        if cycle_pressed or (rmb_pressed and not ctrl.sneak) then
             if force_disabled[name] then
                 minetest.chat_send_player(name, "You cannot use Force abilities while being choked or stunned")
             elseif not star_wars.get_faction(name) then
