@@ -60,7 +60,7 @@ Lord
 
 Dark Lord
 
-You can choose which ability to use via aux1 keybind (default E). You can see which ability and team you have chosen at the left down corner. 
+You can choose which ability to use via aux1 + dig/place keybind (default E + Left Click). You can see which ability and team you have chosen at the left down corner. 
 
 Also adds craftable lightsabers and blasters. Then beskar Armor(not textured yet), Block, Ingots. 
 Each rank gives you one, two, three or even four abilities. Added Yoda + Darth Sidious with quests to get your rank up. Also added Vehicles: X-Wing, Tie Fighter, Speeder(breakable with the new Wrench Tool)!
