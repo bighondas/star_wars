@@ -484,7 +484,13 @@ local function do_crystal_bond(player)
         "star_wars:purple_kyber_crystal",
         "star_wars:yellow_kyber_crystal"
     }
-    player:set_wielded_item(crystals[math.random(1, #crystals)])
+    local new_item = ItemStack(crystals[math.random(1, #crystals)])
+    new_item:set_count(1)
+    local inv = player:get_inventory()
+    local wield_index = player:get_wield_index()
+    item:set_count(item:get_count() - 1)
+    inv:set_stack("main", wield_index, item)
+    inv:add_item("main", new_item)
 end
 
 -- ============================================================
@@ -498,11 +504,14 @@ local function do_crystal_bleed(player)
         minetest.chat_send_player(player:get_player_name(), "You need to hold a Blank Kyber Crystal")
         return
     end
-    if math.random(1, 2) == 1 then
-        player:set_wielded_item("star_wars:purple_kyber_crystal")
-    else
-        player:set_wielded_item("star_wars:red_kyber_crystal")
-    end
+    local result = math.random(1, 2) == 1 and "star_wars:purple_kyber_crystal" or "star_wars:red_kyber_crystal"
+    local new_item = ItemStack(result)
+    new_item:set_count(1)
+    local inv = player:get_inventory()
+    local wield_index = player:get_wield_index()
+    item:set_count(item:get_count() - 1)
+    inv:set_stack("main", wield_index, item)
+    inv:add_item("main", new_item)
 end
 
 -- ============================================================
@@ -699,12 +708,11 @@ minetest.register_globalstep(function(dtime)
         local jump_pressed  = ctrl.jump and not prev.jump
         local rmb_pressed   = ctrl.RMB  and not prev.RMB
         local up_pressed    = ctrl.up   and not prev.up
-            
-        if cycle_pressed or (rmb_pressed and not ctrl.sneak) then
+
+        if ctrl.aux1 and rmb_pressed then
             if force_disabled[name] then
                 minetest.chat_send_player(name, "You cannot use Force abilities while being choked or stunned")
             elseif not star_wars.get_faction(name) then
-                -- no faction
             else
                 force_ability[name] = get_next_ability(name)
                 update_force_hud(player)
