@@ -1,5 +1,5 @@
 -- ============================================================
--- DAGOBAH BLOCKS
+-- BLOCKS
 -- ============================================================
 
 minetest.register_node("star_wars:mud", {
@@ -10,6 +10,7 @@ minetest.register_node("star_wars:mud", {
     sounds = default.node_sound_dirt_defaults(),
     light_source = 3,
 })
+
 minetest.register_node("star_wars:dagobah_log", {
     description = "Dagobah Logs",
     tiles = {"dagobah_log_top.png", "dagobah_log_top.png", "dagobah_log_side.png"},
@@ -20,6 +21,7 @@ minetest.register_node("star_wars:dagobah_log", {
     light_source = 3,
     on_place = minetest.rotate_node
 })
+
 minetest.register_node("star_wars:dagobah_planks", {
     description = "Dagobah Planks",
     tiles = {"dagobah_planks.png"},
@@ -29,6 +31,7 @@ minetest.register_node("star_wars:dagobah_planks", {
     sounds = default.node_sound_wood_defaults(),
     light_source = 3,
 })
+
 minetest.register_node("star_wars:dagobah_roots", {
     description = "Dagobah Roots",
     tiles = {"dagobah_roots.png"},
@@ -40,14 +43,22 @@ minetest.register_node("star_wars:dagobah_roots", {
     light_source = 3,
 })
 
--- ============================================================
--- BLOCKS
--- ============================================================
-
 minetest.register_node("star_wars:beskar_block", {
     description = "Beskar Block",
     tiles = {"beskar_block.png"},
     is_ground_content = false,
     groups = {cracky = 1, level = 2},
     sounds = default.node_sound_metal_defaults(),
+})
+
+minetest.register_node("star_wars:sorgan_grass", {
+	description = "Sorgan Grass",
+	tiles = {"sorgan_grass_top.png", "default_dirt.png",
+		{name = "default_dirt.png^sorgan_grass_side.png",
+			tileable_vertical = false}},
+	groups = {crumbly = 3, soil = 1, spreading_dirt_type = 1},
+	drop = "default:dirt",
+	sounds = default.node_sound_dirt_defaults({
+		footstep = {name = "default_grass_footstep", gain = 0.25},
+	}),
 })
