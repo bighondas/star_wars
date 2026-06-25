@@ -1,5 +1,5 @@
 local colors = {"green", "blue", "red", "purple", "yellow"}
-local hilts = {"single", "cross", "double"}
+local hilts = {"single", "cross", "double", "curved"}
 
 --==========================
 -- HILTS
@@ -41,6 +41,24 @@ minetest.register_craft({
 	}
 })
 
+minetest.register_craft({
+	output = "star_wars:curved_hilt",
+	recipe = {
+		{"","",""},
+		{"","default:steel_ingot",""},
+		{"","","default:steel_ingot"}
+	}
+})
+
+minetest.register_craft({
+	output = "star_wars:shoto_hilt",
+	recipe = {
+		{"","",""},
+		{"","default:steel_ingot",""},
+		{"","",""}
+	}
+})
+
 --==========================
 -- LIGHTSABERS
 --==========================
@@ -72,7 +90,70 @@ for _, color in ipairs(colors) do
             {"star_wars:double_hilt", "", ""}
         }
     })
+
+    minetest.register_craft({
+        output = "star_wars:lightsaber_curved_" .. color .. "_off",
+        recipe = {
+            {"", "", ""},
+            {"star_wars:" ..color.. "_kyber_crystal", "", ""},
+            {"star_wars:curved_hilt", "", ""}
+        }
+    })
+
+    minetest.register_craft({
+        output = "star_wars:lightsaber_shoto_" .. color .. "_off",
+        recipe = {
+            {"", "", ""},
+            {"star_wars:" ..color.. "_kyber_crystal", "", ""},
+            {"star_wars:shoto_hilt", "", ""}
+        }
+    })
 end
+
+minetest.register_craft({
+        output = "star_wars:lightsaber_single_white_off",
+        recipe = {
+            {"", "", ""},
+            {"star_wars:kyber_crystal", "", ""},
+            {"star_wars:single_hilt", "", ""}
+        }
+    })
+
+    minetest.register_craft({
+        output = "star_wars:lightsaber_cross_white_off",
+        recipe = {
+            {"", "", ""},
+            {"star_wars:kyber_crystal", "", ""},
+            {"star_wars:cross_hilt", "", ""}
+        }
+    })
+
+    minetest.register_craft({
+        output = "star_wars:lightsaber_double_white_off",
+        recipe = {
+            {"", "", ""},
+            {"star_wars:kyber_crystal", "", ""},
+            {"star_wars:double_hilt", "", ""}
+        }
+    })
+
+    minetest.register_craft({
+        output = "star_wars:lightsaber_curved_white_off",
+        recipe = {
+            {"", "", ""},
+            {"star_wars:kyber_crystal", "", ""},
+            {"star_wars:curved_hilt", "", ""}
+        }
+    })
+
+    minetest.register_craft({
+        output = "star_wars:lightsaber_shoto_white_off",
+        recipe = {
+            {"", "", ""},
+            {"star_wars:kyber_crystal", "", ""},
+            {"star_wars:shoto_hilt", "", ""}
+        }
+    })
 
 minetest.register_craft({
     output = "star_wars:darksaber_off",
@@ -284,7 +365,6 @@ minetest.register_craft({
 		{"default:steel_ingot","default:steel_ingot","default:steel_ingot"}
 	}
 })
-
 
 
 
