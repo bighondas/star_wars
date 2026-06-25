@@ -279,7 +279,7 @@ end
 local DETECT_RADIUS = 15
 local ATTACK_RADIUS = 1.5
 local MOVE_SPEED    = 2.2
-local WANDER_SPEED  = 2.2
+local WANDER_SPEED  = 1.2
 
 local NPC_FACTION = {
     ["star_wars:yoda"]            = "jedi",
@@ -1167,6 +1167,51 @@ on_death = function(self, killer)
     if pos then
         if math.random(1, 100) <= 30 then
             minetest.add_item(pos, "star_wars:auto_blaster")
+        end
+        
+        if self.inventory_slots then
+            for _, item_string in pairs(self.inventory_slots) do
+                if item_string and item_string ~= "" then
+                    if math.random(1, 100) <= 50 then
+                        minetest.add_item(pos, ItemStack(item_string))
+                    end
+                end
+            end
+        end
+    end
+end,
+})
+
+-- ============================================================
+-- ARGES FROG
+-- ============================================================
+
+minetest.register_entity("star_wars:arge_frog", {
+    initial_properties = {
+        physical = true,
+        collisionbox = {-0.3, 0, -0.3, 0.3, 1.8, 0.3},
+        visual = "mesh",
+        mesh = "arge_frog.obj",
+        textures = {"arge_frog.png"},
+        visual_size = {x = 10, y = 10, z = 10},
+        makes_footstep_sound = true,
+        hp_max = 5,
+    },
+    is_npc = true,
+    move_timer = 0, idle_timer = 0, jump_timer = 0,
+    on_activate = function(self)
+        self.object:set_acceleration({x = 0, y = -10, z = 0})
+        self.object:set_animation({x = 0, y = 79}, 15, 0, true)
+    end,
+    on_step = function(self, dtime)
+        ai_step(self, dtime, nil, false)
+    end,
+on_death = function(self, killer)
+    local pos = self.object:get_pos()
+    
+    if pos then
+        if math.random(1, 100) <= 100 then
+            minetest.add_item(pos, "star_wars:arge_leg")
         end
         
         if self.inventory_slots then
