@@ -38,6 +38,12 @@ local function combat_on_punch(self, puncher, msg)
     self._aggro_target = puncher
 end
 
+local function default_on_punch(self, puncher)
+    if puncher and puncher:get_pos() then
+        self._aggro_target = puncher
+    end
+end
+
 -- ============================================================
 -- WEAPON CONFIGS PER NPC
 -- ============================================================
@@ -55,6 +61,7 @@ local NPC_WEAPON = {
     ["star_wars:darth_revan"]      = {type = "lightsaber", color = "red",    hilt = "cross"},
     ["star_wars:mandalorian"]      = {type = "darksaber"},
     ["star_wars:stormtrooper"]     = {type = "blaster"},
+    ["star_wars:wookee"]           = {type = "auto_blaster"},
 }
 
 -- ============================================================
@@ -83,7 +90,12 @@ local function attach_weapon(self)
         item_name = "star_wars:blaster"
         pos_offset = {x=0, y=5, z=1.4}
         rot_offset = {x=90, y=350, z=270}
+    elseif weapon.type == "auto_blaster" then
+    item_name = "star_wars:auto_blaster"
+    pos_offset = {x=0, y=5, z=2}
+    rot_offset = {x=90, y=315, z=270}
     end
+
 
     if not item_name then return end
 
@@ -119,7 +131,7 @@ minetest.register_entity("star_wars:npc_weapon_visual", {
 })
 
 -- ============================================================
--- DEFLECT STEP (για lightsaber/darksaber NPCs)
+-- DEFLECT STEP
 -- ============================================================
 
 local DEFLECT_RADIUS = 3.5
@@ -186,7 +198,8 @@ local BLASTER_COOLDOWN = 1.2
 
 local function npc_shoot_step(self, dtime)
     self._shoot_timer = (self._shoot_timer or 0) + dtime
-    if self._shoot_timer < BLASTER_COOLDOWN then return end
+    local cooldown = (self.name == "star_wars:wookee") and 0.3 or BLASTER_COOLDOWN
+    if self._shoot_timer < cooldown then return end
 
     if not self.target then return end
     local tpos = self.target:get_pos()
@@ -237,7 +250,7 @@ local function npc_shoot_step(self, dtime)
 end
 
 -- ============================================================
--- LIGHTSABER MELEE ATTACK (αντικαθιστά generic punch)
+-- LIGHTSABER MELEE ATTACK
 -- ============================================================
 
 local function npc_saber_attack(self, target, weapon)
@@ -266,7 +279,7 @@ end
 local DETECT_RADIUS = 15
 local ATTACK_RADIUS = 1.5
 local MOVE_SPEED    = 2.2
-local WANDER_SPEED  = 1.2
+local WANDER_SPEED  = 2.2
 
 local NPC_FACTION = {
     ["star_wars:yoda"]            = "jedi",
@@ -474,7 +487,7 @@ local function ai_step(self, dtime, enemy_faction, aggro_any)
     end
 
     -- STORMTROOPER SHOOT
-    if weapon and weapon.type == "blaster" then
+    if weapon and (weapon.type == "blaster" or weapon.type == "auto_blaster") then
         npc_shoot_step(self, dtime)
     end
 
@@ -496,7 +509,7 @@ local function ai_step(self, dtime, enemy_faction, aggro_any)
             local dist = vector.distance(pos, tpos)
 
             -- stormtrooper: κρατά απόσταση για να πυροβολεί
-            local keep_dist = (weapon and weapon.type == "blaster") and 6 or ATTACK_RADIUS
+            local keep_dist = (weapon and weapon.type == "blaster") and 15 or ATTACK_RADIUS
 
             if dist > keep_dist then
                 local yaw = face_pos(self, pos, tpos)
@@ -562,7 +575,7 @@ local function ai_step(self, dtime, enemy_faction, aggro_any)
 end
 
 -- ============================================================
--- YODA MOB (immortal, επιτίθεται σε sith, αντεπιτίθεται σε οποιον)
+-- YODA
 -- ============================================================
 
 minetest.register_entity("star_wars:yoda", {
@@ -600,7 +613,7 @@ minetest.register_entity("star_wars:yoda", {
 })
 
 -- ============================================================
--- DARTH SIDIOUS MOB
+-- DARTH SIDIOUS
 -- ============================================================
 
 minetest.register_entity("star_wars:darth_sidious", {
@@ -662,11 +675,26 @@ minetest.register_entity("star_wars:luke_skywalker", {
     on_step = function(self, dtime)
         ai_step(self, dtime, "sith", true)
     end,
-    on_punch = function(self, puncher)
-        if puncher and puncher:get_pos() then
-            self._aggro_target = puncher
+    on_punch = function(self, puncher) default_on_punch(self, puncher) end,
+on_death = function(self, killer)
+    local pos = self.object:get_pos()
+    
+    if pos then
+        if math.random(1, 100) <= 15 then
+            minetest.add_item(pos, "star_wars:lightsaber_single_green_off")
         end
-    end,
+        
+        if self.inventory_slots then
+            for _, item_string in pairs(self.inventory_slots) do
+                if item_string and item_string ~= "" then
+                    if math.random(1, 100) <= 50 then
+                        minetest.add_item(pos, ItemStack(item_string))
+                    end
+                end
+            end
+        end
+    end
+end,
 })
 
 -- ============================================================
@@ -693,11 +721,26 @@ minetest.register_entity("star_wars:anakin_skywalker", {
     on_step = function(self, dtime)
         ai_step(self, dtime, "sith", true)
     end,
-    on_punch = function(self, puncher)
-        if puncher and puncher:get_pos() then
-            self._aggro_target = puncher
+    on_punch = function(self, puncher) default_on_punch(self, puncher) end,
+on_death = function(self, killer)
+    local pos = self.object:get_pos()
+    
+    if pos then
+        if math.random(1, 100) <= 15 then
+            minetest.add_item(pos, "star_wars:lightsaber_single_blue_off")
         end
-    end,
+        
+        if self.inventory_slots then
+            for _, item_string in pairs(self.inventory_slots) do
+                if item_string and item_string ~= "" then
+                    if math.random(1, 100) <= 50 then
+                        minetest.add_item(pos, ItemStack(item_string))
+                    end
+                end
+            end
+        end
+    end
+end,
 })
 
 -- ============================================================
@@ -724,11 +767,26 @@ minetest.register_entity("star_wars:obi_wan_kenobi", {
     on_step = function(self, dtime)
         ai_step(self, dtime, "sith", true)
     end,
-    on_punch = function(self, puncher)
-        if puncher and puncher:get_pos() then
-            self._aggro_target = puncher
+    on_punch = function(self, puncher) default_on_punch(self, puncher) end,
+on_death = function(self, killer)
+    local pos = self.object:get_pos()
+    
+    if pos then
+        if math.random(1, 100) <= 15 then
+            minetest.add_item(pos, "star_wars:lightsaber_single_blue_off")
         end
-    end,
+        
+        if self.inventory_slots then
+            for _, item_string in pairs(self.inventory_slots) do
+                if item_string and item_string ~= "" then
+                    if math.random(1, 100) <= 50 then
+                        minetest.add_item(pos, ItemStack(item_string))
+                    end
+                end
+            end
+        end
+    end
+end,
 })
 
 -- ============================================================
@@ -755,11 +813,26 @@ minetest.register_entity("star_wars:qui_gon_jinn", {
     on_step = function(self, dtime)
         ai_step(self, dtime, "sith", true)
     end,
-    on_punch = function(self, puncher)
-        if puncher and puncher:get_pos() then
-            self._aggro_target = puncher
+    on_punch = function(self, puncher) default_on_punch(self, puncher) end,
+on_death = function(self, killer)
+    local pos = self.object:get_pos()
+    
+    if pos then
+        if math.random(1, 100) <= 15 then
+            minetest.add_item(pos, "star_wars:lightsaber_single_green_off")
         end
-    end,
+        
+        if self.inventory_slots then
+            for _, item_string in pairs(self.inventory_slots) do
+                if item_string and item_string ~= "" then
+                    if math.random(1, 100) <= 50 then
+                        minetest.add_item(pos, ItemStack(item_string))
+                    end
+                end
+            end
+        end
+    end
+end,
 })
 
 -- ============================================================
@@ -786,11 +859,26 @@ minetest.register_entity("star_wars:darth_vader", {
     on_step = function(self, dtime)
         ai_step(self, dtime, "jedi", true)
     end,
-    on_punch = function(self, puncher)
-        if puncher and puncher:get_pos() then
-            self._aggro_target = puncher
+    on_punch = function(self, puncher) default_on_punch(self, puncher) end,
+on_death = function(self, killer)
+    local pos = self.object:get_pos()
+    
+    if pos then
+        if math.random(1, 100) <= 15 then
+            minetest.add_item(pos, "star_wars:lightsaber_single_red_off")
         end
-    end,
+        
+        if self.inventory_slots then
+            for _, item_string in pairs(self.inventory_slots) do
+                if item_string and item_string ~= "" then
+                    if math.random(1, 100) <= 50 then
+                        minetest.add_item(pos, ItemStack(item_string))
+                    end
+                end
+            end
+        end
+    end
+end,
 })
 
 -- ============================================================
@@ -817,11 +905,26 @@ minetest.register_entity("star_wars:darth_maul", {
     on_step = function(self, dtime)
         ai_step(self, dtime, "jedi", true)
     end,
-    on_punch = function(self, puncher)
-        if puncher and puncher:get_pos() then
-            self._aggro_target = puncher
+    on_punch = function(self, puncher) default_on_punch(self, puncher) end,
+on_death = function(self, killer)
+    local pos = self.object:get_pos()
+    
+    if pos then
+        if math.random(1, 100) <= 15 then
+            minetest.add_item(pos, "star_wars:lightsaber_double_red_off")
         end
-    end,
+        
+        if self.inventory_slots then
+            for _, item_string in pairs(self.inventory_slots) do
+                if item_string and item_string ~= "" then
+                    if math.random(1, 100) <= 50 then
+                        minetest.add_item(pos, ItemStack(item_string))
+                    end
+                end
+            end
+        end
+    end
+end,
 })
 
 -- ============================================================
@@ -848,11 +951,26 @@ minetest.register_entity("star_wars:count_dooku", {
     on_step = function(self, dtime)
         ai_step(self, dtime, "jedi", true)
     end,
-    on_punch = function(self, puncher)
-        if puncher and puncher:get_pos() then
-            self._aggro_target = puncher
+    on_punch = function(self, puncher) default_on_punch(self, puncher) end,
+on_death = function(self, killer)
+    local pos = self.object:get_pos()
+    
+    if pos then
+        if math.random(1, 100) <= 15 then
+            minetest.add_item(pos, "star_wars:lightsaber_curved_red_off")
         end
-    end,
+        
+        if self.inventory_slots then
+            for _, item_string in pairs(self.inventory_slots) do
+                if item_string and item_string ~= "" then
+                    if math.random(1, 100) <= 50 then
+                        minetest.add_item(pos, ItemStack(item_string))
+                    end
+                end
+            end
+        end
+    end
+end,
 })
 
 -- ============================================================
@@ -879,11 +997,26 @@ minetest.register_entity("star_wars:darth_revan", {
     on_step = function(self, dtime)
         ai_step(self, dtime, "jedi", true)
     end,
-    on_punch = function(self, puncher)
-        if puncher and puncher:get_pos() then
-            self._aggro_target = puncher
+    on_punch = function(self, puncher) default_on_punch(self, puncher) end,
+on_death = function(self, killer)
+    local pos = self.object:get_pos()
+    
+    if pos then
+        if math.random(1, 100) <= 30 then
+            minetest.add_item(pos, "star_wars:lightsaber_cross_red_off")
         end
-    end,
+        
+        if self.inventory_slots then
+            for _, item_string in pairs(self.inventory_slots) do
+                if item_string and item_string ~= "" then
+                    if math.random(1, 100) <= 50 then
+                        minetest.add_item(pos, ItemStack(item_string))
+                    end
+                end
+            end
+        end
+    end
+end,
 })
 
 -- ============================================================
@@ -910,6 +1043,25 @@ minetest.register_entity("star_wars:stormtrooper", {
     on_step = function(self, dtime)
         ai_step(self, dtime, "jedi", false)
     end,
+on_death = function(self, killer)
+    local pos = self.object:get_pos()
+    
+    if pos then
+        if math.random(1, 100) <= 30 then
+            minetest.add_item(pos, "star_wars:blaster")
+        end
+        
+        if self.inventory_slots then
+            for _, item_string in pairs(self.inventory_slots) do
+                if item_string and item_string ~= "" then
+                    if math.random(1, 100) <= 50 then
+                        minetest.add_item(pos, ItemStack(item_string))
+                    end
+                end
+            end
+        end
+    end
+end,
 })
 
 -- ============================================================
@@ -961,9 +1113,71 @@ minetest.register_entity("star_wars:mandalorian", {
     on_step = function(self, dtime)
         ai_step(self, dtime, nil, true)
     end,
-    on_punch = function(self, puncher)
-        if puncher and puncher:get_pos() then
-            self._aggro_target = puncher
+    on_punch = function(self, puncher) default_on_punch(self, puncher) end,
+on_death = function(self, killer)
+    local pos = self.object:get_pos()
+    
+    if pos then
+        if math.random(1, 100) <= 100 then
+            minetest.add_item(pos, "star_wars:darksaber_off")
         end
+        
+        if self.inventory_slots then
+            for _, item_string in pairs(self.inventory_slots) do
+                if item_string and item_string ~= "" then
+                    if math.random(1, 100) <= 50 then
+                        minetest.add_item(pos, ItemStack(item_string))
+                    end
+                end
+            end
+        end
+    end
+end,
+})
+
+-- ============================================================
+-- WOOKEE
+-- ============================================================
+
+minetest.register_entity("star_wars:wookee", {
+    initial_properties = {
+        physical = true,
+        collisionbox = {-0.3, 0, -0.3, 0.3, 1.8, 0.3},
+        visual = "mesh", mesh = "character.b3d",
+        textures = {"wookee.png"},
+        visual_size = {x = 1.1, y = 1.1, z = 1.1},
+        makes_footstep_sound = true,
+        hp_max = 40,
+    },
+    is_npc = true,
+    move_timer = 0, attack_timer = 0, idle_timer = 0, jump_timer = 0,
+    on_activate = function(self)
+        self.object:set_acceleration({x = 0, y = -10, z = 0})
+        self.object:set_animation({x = 0, y = 79}, 15, 0, true)
+        attach_weapon(self)
     end,
+    on_step = function(self, dtime)
+        ai_step(self, dtime, nil, true)
+    end,
+    on_punch = function(self, puncher) default_on_punch(self, puncher) end,
+
+on_death = function(self, killer)
+    local pos = self.object:get_pos()
+    
+    if pos then
+        if math.random(1, 100) <= 30 then
+            minetest.add_item(pos, "star_wars:auto_blaster")
+        end
+        
+        if self.inventory_slots then
+            for _, item_string in pairs(self.inventory_slots) do
+                if item_string and item_string ~= "" then
+                    if math.random(1, 100) <= 50 then
+                        minetest.add_item(pos, ItemStack(item_string))
+                    end
+                end
+            end
+        end
+    end
+end,
 })
