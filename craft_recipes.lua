@@ -196,6 +196,12 @@ minetest.register_craft({
        recipe = "star_wars:raw_beskar",
 })
 
+minetest.register_craft({
+       type = "cooking",
+       output = "star_wars:cooked_arge_leg",
+       recipe = "star_wars:arge_leg",
+})
+
 --==========================
 -- ARMOR
 --==========================
@@ -365,6 +371,7 @@ minetest.register_craft({
 		{"default:steel_ingot","default:steel_ingot","default:steel_ingot"}
 	}
 })
+
 
 
 
