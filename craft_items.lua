@@ -97,6 +97,11 @@ minetest.register_craftitem("star_wars:arge_leg", {
 	on_use = minetest.item_eat (4) 
 })
 
+minetest.register_craftitem("star_wars:cooked_arge_leg", {
+    description = "Cooked Arge Leg",
+    inventory_image =  "cooked_arge_leg.png",
+	on_use = minetest.item_eat (7) 
+})
 
 
 
