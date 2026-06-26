@@ -26,7 +26,6 @@ minetest.register_node("star_wars:dagobah_planks", {
     description = "Dagobah Planks",
     tiles = {"dagobah_planks.png"},
     paramtype = "light",
-    paramtype2 = "facedir",
     groups = {choppy = 2, oddly_breakable_by_hand = 1, flammable = 2, wood = 1},
     sounds = default.node_sound_wood_defaults(),
     light_source = 3,
