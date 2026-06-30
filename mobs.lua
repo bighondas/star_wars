@@ -62,6 +62,7 @@ local NPC_WEAPON = {
     ["star_wars:mandalorian"]      = {type = "darksaber"},
     ["star_wars:stormtrooper"]     = {type = "blaster"},
     ["star_wars:wookee"]           = {type = "auto_blaster"},
+    ["star_wars:tusk_raider"] = {type = "gaffi"},
 }
 
 -- ============================================================
@@ -91,10 +92,14 @@ local function attach_weapon(self)
         pos_offset = {x=0, y=5, z=1.4}
         rot_offset = {x=90, y=350, z=270}
     elseif weapon.type == "auto_blaster" then
-    item_name = "star_wars:auto_blaster"
-    pos_offset = {x=0, y=5, z=2}
-    rot_offset = {x=90, y=315, z=270}
-    end
+        item_name = "star_wars:auto_blaster"
+        pos_offset = {x=0, y=5, z=2}
+        rot_offset = {x=90, y=315, z=270}
+   elseif weapon.type == "gaffi" then
+      item_name = "star_wars:gaffi_stick"
+      pos_offset = {x=0, y=5, z=3}
+      rot_offset = {x=90, y=315, z=270}
+   end
 
 
     if not item_name then return end
@@ -105,7 +110,11 @@ local function attach_weapon(self)
     local lua = ent:get_luaentity()
     if lua then
         lua.parent = self.object
-        ent:set_properties({textures = {item_name}})
+        if weapon.type == "gaffi" then
+            ent:set_properties({textures = {item_name}, visual_size = {x=0.5, y=0.5, z=0.5}})
+        else
+            ent:set_properties({textures = {item_name}})
+        end
     end
 end
 
@@ -256,15 +265,52 @@ end
 local function npc_saber_attack(self, target, weapon)
     if not target or not target:get_pos() then return end
 
+    local is_blocking = false
+
+    if target:is_player() then
+        local wielded = target:get_wielded_item():get_name()
+        local def = minetest.registered_items[wielded]
+        if def and def.groups and def.groups.lightsaber == 1
+        and target:get_player_control().LMB == true then
+            is_blocking = true
+        end
+    else
+        local tent = target:get_luaentity()
+        if tent and tent.name then
+            local tweapon = NPC_WEAPON[tent.name]
+            if tweapon and (tweapon.type == "lightsaber" or tweapon.type == "darksaber") then
+                if math.random() < 0.3 then
+                    is_blocking = true
+                end
+            end
+        end
+    end
+
+    local sound = "star_wars_swing"
+    if weapon and weapon.hilt == "cross" then
+        sound = "star_wars_swing_cross"
+    elseif weapon and weapon.type == "gaffi" then
+        sound = "default_punch"
+    end
+
+    if is_blocking then
+        local clash_sound = "star_wars_clash"
+        if weapon and weapon.hilt == "cross" then
+            clash_sound = "star_wars_clash_cross"
+        end
+        minetest.sound_play(clash_sound, {
+            pos = self.object:get_pos(),
+            gain = 1.0,
+            max_hear_distance = 16,
+        })
+        return
+    end
+
     target:punch(self.object, 1.0, {
         full_punch_interval = 1.5,
         damage_groups = {fleshy = 8},
     }, nil)
 
-    local sound = "star_wars_swing"
-    if weapon and weapon.hilt == "cross" then
-        sound = "star_wars_swing_cross"
-    end
     minetest.sound_play(sound, {
         pos = self.object:get_pos(),
         gain = 1.0,
@@ -276,8 +322,9 @@ end
 -- AI HELPERS
 -- ============================================================
 
-local DETECT_RADIUS = 15
-local ATTACK_RADIUS = 1.5
+local DETECT_RADIUS = 20
+local ATTACK_RADIUS = 3.5
+local ATTACK_COOLDOWN_MELEE   = 0.5
 local MOVE_SPEED    = 2.2
 local WANDER_SPEED  = 1.2
 
@@ -294,6 +341,10 @@ local NPC_FACTION = {
     ["star_wars:darth_revan"]     = "sith",
     ["star_wars:stormtrooper"]    = "sith",
 }
+
+function star_wars.get_npc_faction(entity_name)
+    return NPC_FACTION[entity_name]
+end
 
 local function get_ground_y(pos)
     for y = pos.y, pos.y - 5, -1 do
@@ -424,8 +475,25 @@ local function ai_step(self, dtime, enemy_faction, aggro_any)
     -- αναζήτηση target
     if self.target_timer > 0.5 then
         self.target_timer = 0
-        if enemy_faction and (not self.target or not self.target:get_pos()) then
-            self.target, _ = find_target(pos, enemy_faction, self.object)
+        if (enemy_faction or aggro_any) and (not self.target or not self.target:get_pos()) then
+            local found = nil
+            if enemy_faction then
+                found = (find_target(pos, enemy_faction, self.object))
+            end
+            if not found and aggro_any then
+                local nearest, nearest_dist = nil, DETECT_RADIUS
+                for _, obj in ipairs(minetest.get_objects_inside_radius(pos, DETECT_RADIUS)) do
+                    if obj:is_player() and obj ~= self.object then
+                        local d = vector.distance(pos, obj:get_pos())
+                        if d < nearest_dist and has_clear_path(pos, obj:get_pos()) then
+                            nearest_dist = d
+                            nearest = obj
+                        end
+                    end
+                end
+                found = nearest
+            end
+            self.target = found
             self._aggro_from_punch = false
         end
     end
@@ -446,7 +514,7 @@ local function ai_step(self, dtime, enemy_faction, aggro_any)
     end
 
     -- ATTACK
-    if self.attack_timer > 1.5 then
+    if self.attack_timer > 0.5 then
         self.attack_timer = 0
         if self.target then
             local tpos = self.target:get_pos()
@@ -454,6 +522,7 @@ local function ai_step(self, dtime, enemy_faction, aggro_any)
                 local dist = vector.distance(pos, tpos)
                 local do_attack = self._aggro_from_punch
                     or (enemy_faction and is_enemy_of(self.target, enemy_faction))
+                    or (aggro_any and self.target:is_player())
 
                 if do_attack then
                     -- stormtrooper: δεν κάνει melee εδώ, το handle-άρει npc_shoot_step
@@ -1332,4 +1401,39 @@ creatura.register_abm_spawn("star_wars:arge_frog", {
     max_group = 3,
     biomes = {"sorgan"},
     nodes = {"default:river_water_source"},
+})
+
+-- ============================================================
+-- TUSK RAIDER
+-- ============================================================
+
+minetest.register_entity("star_wars:tusk_raider", {
+    initial_properties = {
+        physical = true,
+        collisionbox = {-0.3, 0, -0.3, 0.3, 1.8, 0.3},
+        visual = "mesh", mesh = "character.b3d",
+        textures = {"tusk_raider.png"},
+        visual_size = {x = 1.1, y = 1.1, z = 1.1},
+        makes_footstep_sound = true,
+        hp_max = 30,
+    },
+    is_npc = true,
+    move_timer = 0, attack_timer = 0, idle_timer = 0, jump_timer = 0,
+    on_activate = function(self)
+        self.object:set_acceleration({x = 0, y = -10, z = 0})
+        self.object:set_animation({x = 0, y = 79}, 15, 0, true)
+        attach_weapon(self)
+    end,
+    on_step = function(self, dtime)
+        ai_step(self, dtime, nil, true)
+    end,
+    on_punch = function(self, puncher) default_on_punch(self, puncher) end,
+    on_death = function(self, killer)
+        local pos = self.object:get_pos()
+        if pos then
+            if math.random(1, 100) <= 40 then
+                minetest.add_item(pos, "star_wars:gaffi_stick")
+            end
+        end
+    end,
 })
