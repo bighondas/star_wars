@@ -24,6 +24,29 @@ local cooldowns = {
 -- HUD & UTILITIES
 -- ============================================================
 
+local NO_FORCE_TARGET = {
+    ["star_wars:yoda"] = true,
+    ["star_wars:darth_sidious"] = true,
+    ["star_wars:arge_frog"] = true,
+}
+
+local function is_valid_force_target(obj)
+    if obj:is_player() then return true end
+    local ent = obj:get_luaentity()
+    if not ent or not ent.name then return false end
+    if NO_FORCE_TARGET[ent.name] then return false end
+    if not ent.is_npc then return false end
+    return true
+end
+
+local function aggro_npc(target, caster)
+    if target:is_player() then return end
+    local ent = target:get_luaentity()
+    if ent and caster then
+        ent._aggro_target = caster
+    end
+end
+
 local function get_next_ability(name)
     local order = star_wars.get_ability_order(name)
     local current = force_ability[name] or "None"
@@ -182,10 +205,19 @@ local function ray_pointed_thing(player)
     for pointed_thing in ray do
         if pointed_thing.type == "object" then
             local obj = pointed_thing.ref
-            if obj and obj:is_player() and obj:get_player_name() ~= player:get_player_name() then
+            if obj and obj ~= player and is_valid_force_target(obj) then
                 return obj
             end
         end
+    end
+end
+
+local function add_velocity(obj, vel)
+    if obj:is_player() then
+        obj:add_player_velocity(vel)
+    else
+        local cur = obj:get_velocity() or {x=0,y=0,z=0}
+        obj:set_velocity(vector.add(cur, vel))
     end
 end
 
@@ -232,7 +264,8 @@ local function do_force_push(player)
     end
     if not can_use_ability(player, "Push", cooldowns.Push) then return end
     local dir = player:get_look_dir()
-    target:add_player_velocity(vector.multiply(dir, 17))
+    add_velocity(target, vector.multiply(dir, 17))
+    aggro_npc(target, player)
 end
 
 -- ============================================================
@@ -252,7 +285,8 @@ local function do_force_pull(player)
     end
     if not can_use_ability(player, "Pull", cooldowns["Pull"]) then return end
     local dir = player:get_look_dir()
-    target:add_player_velocity(vector.multiply(dir, -17))
+    add_velocity(target, vector.multiply(dir, -17))
+    aggro_npc(target, player)
 end
 
 -- ============================================================
@@ -294,6 +328,20 @@ local function do_force_sense(player)
             end
             table.insert(targets, {obj = obj, color = color})
             table.insert(sensed_names, target_name)
+        elseif not obj:is_player() then
+            local ent = obj:get_luaentity()
+            if ent and ent.is_npc and ent.name and not NO_FORCE_TARGET[ent.name] then
+                local npc_faction = star_wars.get_npc_faction(ent.name)
+                local color
+                if npc_faction == "jedi" then
+                    color = "blue.png"
+                elseif npc_faction == "sith" then
+                    color = "red.png"
+                else
+                    color = "white.png"
+                end
+                table.insert(targets, {obj = obj, color = color})
+            end
         end
     end
 
@@ -309,7 +357,6 @@ local function do_force_sense(player)
         timer = 10,
     }
 
-    -- Ενημέρωσε το quest system με τους παίκτες που εντοπίστηκαν
     star_wars.on_force_sense(name, sensed_names)
 end
 
@@ -356,22 +403,6 @@ end
 -- FORCE CHOKE (Sith only)
 -- ============================================================
 
-local function stop_force_choke(caster_name)
-    local data = active_choke[caster_name]
-    if not data then return end
-    local target = minetest.get_player_by_name(data.target_name)
-    if target then
-        target:set_physics_override({speed = 1, gravity = 1, jump = 1})
-    end
-    local caster = minetest.get_player_by_name(caster_name)
-    if caster then
-        ability_cooldown[caster_name] = ability_cooldown[caster_name] or {}
-        ability_cooldown[caster_name]["Choke"] = minetest.get_gametime() + cooldowns.Choke
-    end
-    force_disabled[data.target_name] = nil
-    active_choke[caster_name] = nil
-end
-
 local function start_force_choke(player)
     local caster_name = player:get_player_name()
     if active_choke[caster_name] then return end
@@ -389,40 +420,69 @@ local function start_force_choke(player)
         minetest.chat_send_player(caster_name, "No target for Force Choke")
         return
     end
-    local target_name = target:get_player_name()
+
+    local target_is_player = target:is_player()
+    local target_name = target_is_player and target:get_player_name() or nil
+
     active_choke[caster_name] = {
+        target_obj = target,
         target_name = target_name,
-        old_physics = {speed = 1, gravity = 1, jump = 1},
+        target_is_player = target_is_player,
         time_left = 7,
         damage_timer = 0,
         lifted = false,
     }
-    force_disabled[target_name] = true
-    target:set_physics_override({speed = 0.1, gravity = 0.0, jump = 0})
-    target:set_velocity({x = 0, y = 0, z = 0})
-    minetest.after(0.05, function()
-        local t = minetest.get_player_by_name(target_name)
-        if t then
-            t:set_velocity({x = 0, y = 0, z = 0})
-            t:set_physics_override({speed = 0.1, gravity = 0.0, jump = 0})
+
+    if target_is_player then
+        force_disabled[target_name] = true
+        target:set_physics_override({speed = 0.1, gravity = 0.0, jump = 0})
+        target:set_velocity({x = 0, y = 0, z = 0})
+        minetest.after(0.05, function()
+            local t = minetest.get_player_by_name(target_name)
+            if t then
+                t:set_velocity({x = 0, y = 0, z = 0})
+                t:set_physics_override({speed = 0.1, gravity = 0.0, jump = 0})
+            end
+        end)
+    else
+        target:set_velocity({x = 0, y = 0, z = 0})
+        target:set_acceleration({x = 0, y = 0, z = 0})
+        local ent = target:get_luaentity()
+        if ent then ent._force_disabled = true end
+    end
+end
+
+local function stop_force_choke(caster_name)
+    local data = active_choke[caster_name]
+    if not data then return end
+
+    if data.target_is_player then
+        local target = minetest.get_player_by_name(data.target_name)
+        if target then
+            target:set_physics_override({speed = 1, gravity = 1, jump = 1})
         end
-    end)
+        force_disabled[data.target_name] = nil
+      else
+          target:set_velocity({x = 0, y = 0, z = 0})
+          target:set_acceleration({x = 0, y = 0, z = 0})
+          local ent = target:get_luaentity()
+          if ent then
+              ent._force_disabled = true
+              ent._aggro_target = player
+          end
+      end
+
+    local caster = minetest.get_player_by_name(caster_name)
+    if caster then
+        ability_cooldown[caster_name] = ability_cooldown[caster_name] or {}
+        ability_cooldown[caster_name]["Choke"] = minetest.get_gametime() + cooldowns.Choke
+    end
+    active_choke[caster_name] = nil
 end
 
 -- ============================================================
 -- FORCE LIGHTNING (Sith only)
 -- ============================================================
-
-local function stop_force_lightning(caster_name)
-    local data = active_lightning[caster_name]
-    if not data then return end
-    local target = minetest.get_player_by_name(data.target_name)
-    if target then
-        reset_player_physics(target)
-        force_disabled[data.target_name] = nil
-    end
-    active_lightning[caster_name] = nil
-end
 
 local function start_force_lightning(player)
     local caster_name = player:get_player_name()
@@ -438,20 +498,53 @@ local function start_force_lightning(player)
         return
     end
     if active_lightning[caster_name] then return end
+
     local target = ray_pointed_thing(player)
     if not target then
         minetest.chat_send_player(caster_name, "No target for Force Lightning")
         return
     end
     if not can_use_ability(player, "Force Lightning", cooldowns["Force Lightning"]) then return end
-    local target_name = target:get_player_name()
+
+    local target_is_player = target:is_player()
+    local target_name = target_is_player and target:get_player_name() or nil
+
     active_lightning[caster_name] = {
+        target_obj = target,
         target_name = target_name,
+        target_is_player = target_is_player,
         damage_timer = 0,
         time_left = 10,
     }
-    force_disabled[target_name] = true
-    target:set_physics_override({speed = 0.3, gravity = 1, jump = 0})
+
+    if target_is_player then
+        force_disabled[target_name] = true
+        target:set_physics_override({speed = 0.3, gravity = 1, jump = 0})
+    else
+        local ent = target:get_luaentity()
+        if ent then ent._force_disabled = true end
+    end
+end
+
+local function stop_force_lightning(caster_name)
+    local data = active_lightning[caster_name]
+    if not data then return end
+
+    if data.target_is_player then
+        local target = minetest.get_player_by_name(data.target_name)
+        if target then
+            reset_player_physics(target)
+            force_disabled[data.target_name] = nil
+        end
+      else
+          local ent = target:get_luaentity()
+          if ent then
+              ent._force_disabled = true
+              ent._aggro_target = player
+          end
+      end
+
+    active_lightning[caster_name] = nil
 end
 
 -- ============================================================
@@ -608,81 +701,105 @@ minetest.register_globalstep(function(dtime)
 
     -- Choke tick
     for caster_name, data in pairs(active_choke) do
-        local caster = minetest.get_player_by_name(caster_name)
-        local target = minetest.get_player_by_name(data.target_name)
-        if not caster or not target then
+    local caster = minetest.get_player_by_name(caster_name)
+    local target = data.target_obj
+    local target_alive = target and target:get_pos()
+        and (not data.target_is_player or minetest.get_player_by_name(data.target_name))
+
+    if not caster or not target_alive then
+        stop_force_choke(caster_name)
+    else
+        local ctrl = caster:get_player_control()
+        if not ctrl.sneak or not ctrl.RMB or (force_ability[caster_name] or "None") ~= "Choke" then
             stop_force_choke(caster_name)
         else
-            local ctrl = caster:get_player_control()
-            if not ctrl.sneak or not ctrl.RMB or (force_ability[caster_name] or "None") ~= "Choke" then
+            data.time_left = data.time_left - dtime
+            data.damage_timer = (data.damage_timer or 0) + dtime
+            if data.time_left <= 0 then
                 stop_force_choke(caster_name)
             else
-                data.time_left = data.time_left - dtime
-                data.damage_timer = (data.damage_timer or 0) + dtime
-                if data.time_left <= 0 then
-                    stop_force_choke(caster_name)
-                else
-                    if not data.lifted then
-                        data.lifted = true
-                        local pos = target:get_pos()
-                        target:set_pos({x = pos.x, y = pos.y + 2, z = pos.z})
-                        target:set_velocity({x = 0, y = 0, z = 0})
+                if not data.lifted then
+                    data.lifted = true
+                    local pos = target:get_pos()
+                    target:set_pos({x = pos.x, y = pos.y + 2, z = pos.z})
+                    target:set_velocity({x = 0, y = 0, z = 0})
+                    if data.target_is_player then
                         target:set_physics_override({speed = 0.1, gravity = 0.0, jump = 0})
+                    else
+                        target:set_acceleration({x = 0, y = 0, z = 0})
                     end
+                end
+                target:set_velocity({x = 0, y = 0, z = 0})
+                if data.target_is_player then
                     target:set_physics_override({speed = 0.1, gravity = 0.0, jump = 0})
-                    target:set_velocity({x = 0, y = 0, z = 0})
-                    target:set_physics_override({speed = 0.1, gravity = 0.0, jump = 0})
-                    target:set_velocity({x = 0, y = 0, z = 0})
-                    if data.damage_timer >= 1 then
-                        data.damage_timer = data.damage_timer - 1
-                        local hp = target:get_hp()
-                        target:set_hp(math.max(0, hp - 1))
-                        if target:get_hp() <= 0 then
-                            -- Το kill event θα πυροδοτηθεί από on_dieplayer
+                end
+
+                if data.damage_timer >= 1 then
+                    data.damage_timer = data.damage_timer - 1
+                    local hp = target:get_hp()
+                    target:set_hp(math.max(0, hp - 1))
+                    if target:get_hp() <= 0 then
+                        if data.target_is_player then
                             active_choke[caster_name] = nil
                             force_disabled[data.target_name] = nil
-                            break
+                        else
+                            local ent = target:get_luaentity()
+                            if ent and ent.on_death then ent.on_death(ent, caster) end
+                            target:remove()
+                            active_choke[caster_name] = nil
                         end
+                        break
                     end
                 end
             end
         end
     end
+end
 
     -- Force Lightning tick
     for caster_name, data in pairs(active_lightning) do
-        local caster = minetest.get_player_by_name(caster_name)
-        local target = minetest.get_player_by_name(data.target_name)
-        if not caster or not target then
+    local caster = minetest.get_player_by_name(caster_name)
+    local target = data.target_obj
+    local target_alive = target and target:get_pos()
+        and (not data.target_is_player or minetest.get_player_by_name(data.target_name))
+
+    if not caster or not target_alive then
+        stop_force_lightning(caster_name)
+    else
+        local ctrl = caster:get_player_control()
+        local item = caster:get_wielded_item():get_name()
+        local has_saber = minetest.registered_items[item]
+            and minetest.registered_items[item].groups
+            and minetest.registered_items[item].groups.lightsaber == 1
+
+        if not ctrl.sneak or not ctrl.RMB
+        or (force_ability[caster_name] or "None") ~= "Force Lightning"
+        or has_saber then
             stop_force_lightning(caster_name)
         else
-            local ctrl = caster:get_player_control()
-            local item = caster:get_wielded_item():get_name()
-            local has_saber = minetest.registered_items[item]
-                and minetest.registered_items[item].groups
-                and minetest.registered_items[item].groups.lightsaber == 1
-
-            if not ctrl.sneak or not ctrl.RMB
-            or (force_ability[caster_name] or "None") ~= "Force Lightning"
-            or has_saber then
+            data.time_left = data.time_left - dtime
+            data.damage_timer = (data.damage_timer or 0) + dtime
+            if data.time_left <= 0 then
                 stop_force_lightning(caster_name)
             else
-                data.time_left = data.time_left - dtime
-                data.damage_timer = (data.damage_timer or 0) + dtime
-                if data.time_left <= 0 then
-                    stop_force_lightning(caster_name)
-                else
-                    if data.damage_timer >= 0.5 then
-                        data.damage_timer = data.damage_timer - 0.5
-                        local hp = target:get_hp()
-                        target:set_hp(math.max(0, hp - 2))
-                        if target:get_hp() <= 0 then
-                            -- Το kill event θα πυροδοτηθεί από on_dieplayer
+                if data.damage_timer >= 0.5 then
+                    data.damage_timer = data.damage_timer - 0.5
+                    local hp = target:get_hp()
+                    target:set_hp(math.max(0, hp - 2))
+                    if target:get_hp() <= 0 then
+                        if data.target_is_player then
                             active_lightning[caster_name] = nil
                             force_disabled[data.target_name] = nil
-                            break
+                        else
+                            local ent = target:get_luaentity()
+                            if ent and ent.on_death then ent.on_death(ent, caster) end
+                            target:remove()
+                            active_lightning[caster_name] = nil
                         end
+                        break
                     end
+                end
+                if data.target_is_player then
                     target:set_physics_override({speed = 0.3, gravity = 1, jump = 0})
                     if math.random(1, 5) == 1 then
                         target:add_player_velocity({
@@ -691,10 +808,20 @@ minetest.register_globalstep(function(dtime)
                             z = (math.random() - 0.5) * 2
                         })
                     end
+                else
+                    if math.random(1, 5) == 1 then
+                        local cur = target:get_velocity() or {x=0,y=0,z=0}
+                        target:set_velocity(vector.add(cur, {
+                            x = (math.random() - 0.5) * 2,
+                            y = 0.5,
+                            z = (math.random() - 0.5) * 2
+                        }))
+                    end
                 end
             end
         end
     end
+end
 
     update_force_sense(dtime)
 
